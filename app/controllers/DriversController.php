@@ -300,7 +300,7 @@
     
                                          if($driver_can_do)
                                          {
-    
+    //asd ff
                                              $param = array("origin"=>$arrival, "destination" => $driver_pos->next->location);
                                              $reponse = Geocoder::directions('json', $param);
     
