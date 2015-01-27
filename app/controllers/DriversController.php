@@ -326,7 +326,7 @@
                                                   { 
                                                       $total_time_spent= $duration_to_trip + $duration_to_next + $default_trip_time;
                                                       //echo '</br>';
-    
+                echo $aa;
                                                       //echo 'Distance to NEXT: '.$distance_to_next; echo '</br>';
                                                       //echo  'TRIP DIstance'.$trip_distance;
                                                       $total_distance = $distance_to_trip + $distance_to_next + $trip_distance;
