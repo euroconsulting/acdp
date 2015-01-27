@@ -54,6 +54,32 @@ Route::filter('auth.basic', function()
 	return Auth::basic();
 });
 
+Route::filter('auth.admin', function()
+{
+      if (Auth::guest())
+         return Redirect::to('/');
+    
+         
+    if (Auth::user()->admin != 1)
+        return Redirect::to('/');
+});
+
+Route::filter('auth.public', function()
+{
+    if (Auth::guest())
+        return Redirect::to('/');
+     
+    if (Auth::user() != null && Auth::user()->admin != 2)
+          return Redirect::to('/');
+});
+
+
+//Route::filter('admin', function()
+//{
+//	if(Auth::user() && Auth::user()->admin ==1)
+//        return Redirect::to('/');
+//});
+
 /*
 |--------------------------------------------------------------------------
 | Guest Filter
