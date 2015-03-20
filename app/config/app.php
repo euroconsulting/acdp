@@ -13,7 +13,7 @@ return array(
 	|
 	*/
 
-	'debug' => false,
+	'debug' => true,
 
 	/*
 	|--------------------------------------------------------------------------
@@ -78,9 +78,17 @@ return array(
 	|
 	*/
 
-	'key' => 'jmM1xkkfbHPBSj5T4swWetb3DLeyxY9t',
+	//'key' => 'jmM1xkkfbHPBSj5T4swWetb3DLeyxY9t',
+
+	//'cipher' => MCRYPT_RIJNDAEL_128,
+
+
+    
+	'key' => 'ikq2LbbChl9pUPlLQEI0cnsqduU7nVs6',
 
 	'cipher' => MCRYPT_RIJNDAEL_128,
+
+
 
 	/*
 	|--------------------------------------------------------------------------
@@ -122,7 +130,6 @@ return array(
 		'Illuminate\View\ViewServiceProvider',
 		'Illuminate\Workbench\WorkbenchServiceProvider',
         'Alexpechkarev\GoogleGeocoder\GoogleGeocoderServiceProvider',
-
 	),
 
 
@@ -190,7 +197,12 @@ return array(
 		'URL'               => 'Illuminate\Support\Facades\URL',
 		'Validator'         => 'Illuminate\Support\Facades\Validator',
 		'View'              => 'Illuminate\Support\Facades\View',
-    
 	),
 
+
 );
+
+App::bind('payment', function()
+{
+    return new \Addresses\Address;
+});

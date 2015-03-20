@@ -46,42 +46,43 @@ return array(
 
 	'connections' => array(
 
-		'sqlite' => array(
-			'driver'   => 'sqlite',
-			'database' => __DIR__.'/../database/production.sqlite',
-			'prefix'   => '',
-		),
+		//'sqlite' => array(
+		//	'driver'   => 'sqlite',
+		//	'database' => __DIR__.'/../database/production.sqlite',
+		//	'prefix'   => '',
+		//),
 
 		'mysql' => array(
 			'driver'    => 'mysql',
 			'host'      => 'localhost',
-			'database'  => 'forge',
-			'username'  => 'forge',
-			'password'  => '',
+			'database'  => 'acdp',
+			'username'  => 'root',
+			'password'  => 'Labitajojo777',
 			'charset'   => 'utf8',
 			'collation' => 'utf8_unicode_ci',
 			'prefix'    => '',
-		),
+		),'prefix'    => '',
+		
 
-		'pgsql' => array(
-			'driver'   => 'pgsql',
-			'host'     => 'localhost',
-			'database' => 'forge',
-			'username' => 'forge',
-			'password' => '',
-			'charset'  => 'utf8',
-			'prefix'   => '',
-			'schema'   => 'public',
-		),
+		//'pgsql' => array(
+		//	'driver'   => 'pgsql',
+		//	'host'     => 'localhost',
+		//	'database' => 'forge',
+		//	'username' => 'forge',
+		//	'password' => '',
+		//	'charset'  => 'utf8',
+		//	'prefix'   => '',
+		//	'schema'   => 'public',
+		//),
 
-		'sqlsrv' => array(
-			'driver'   => 'sqlsrv',
-			'host'     => 'localhost',
-			'database' => 'database',
-			'username' => 'root',
-			'password' => '',
-			'prefix'   => '',
-		),
+		//'sqlsrv' => array(
+		//	'driver'   => 'sqlsrv',
+		//	'host'     => 'localhost',
+		//	'database' => 'database',
+		//	'username' => 'root',
+		//	'password' => '',
+		//	'prefix'   => '',
+		//),
 
 	),
 

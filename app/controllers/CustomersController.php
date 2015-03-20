@@ -2,14 +2,23 @@
  
 class CustomersController extends BaseController {
  
-    public function __construct()
-    {
-        //$this->beforeFilter('auth.company',  array('only' => array('index') ));
-    }
+   
  
     public function index()
     {
-          $customers =  Customer::with('user')->get();
+          if(Auth::User()->is_super_admin())
+               $customers =  Customer::with('user')->where('active','=', true)->get();
+            else
+            {
+                $company_id = $this->company->id;
+                $customers =   Customer::with('user')->whereHas('user', function($q) use ( $company_id)
+                                {
+                                    $q->where('company_id', '=', $company_id);
+
+                                })->where('active','=', true)->get();
+            }
+
+      
           $this->Jtable($customers);
     }
 
@@ -19,11 +28,6 @@ class CustomersController extends BaseController {
        return View::make('customers.index');
     }
 
-     public function customer_dashboard($id)
-    {
-       $customer = Customer::find($id);
-       return View::make('customers.customer.index', ['customer' => $customer]);
-    }
+ 
 
-    
 }

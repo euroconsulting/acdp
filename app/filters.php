@@ -11,9 +11,13 @@
 |
 */
 
+
 App::before(function($request)
 {
-	//
+	header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Origin, Content-Type, Accept, Authorization, X-Request-With');
+    header('Access-Control-Allow-Credentials: false');
 });
 
 
@@ -64,13 +68,14 @@ Route::filter('auth.admin', function()
         return Redirect::to('/');
 });
 
-Route::filter('auth.public', function()
+Route::filter('auth.customer', function()
 {
-    if (Auth::guest())
-        return Redirect::to('/');
-     
-    if (Auth::user() != null && Auth::user()->admin != 2)
-          return Redirect::to('/');
+    //  if (Auth::guest())
+    //     return Redirect::to('/');
+
+    //if(count(Auth::user()->customer)  0)
+    //    return Redirect::to('/');
+    
 });
 
 

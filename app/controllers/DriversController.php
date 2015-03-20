@@ -1,518 +1,1032 @@
 <?php
+         include_once('SphericalGeometry.php');
     
-            class DriversController extends BaseController {
+         class DriversController extends BaseController {
     
-                public function __construct()
-                {
-                    //$this->beforeFilter('auth.company',  array('only' => array('index') ));
-                }
+                        public $departing;
+                        public $driver_departing_time;
+                        public $arrival;
+                        public $distance;
+                        public $time;
+                        public $departing_time;
+                        public $arrival_time;
+                        public $minutes;
+                        public $kms;
+                        public $day;
+                        public $today;
+                        public $lat;
+                        public $lng;
+                        //driver agenda globals
+                        public $start_hour;                                                                                                                                                                                                                                                                                  
+                        public $end_hour;
+                        //calc method
+                        public $calc_method;
+                        public $trip_method;
     
-                public function dashboard()
-                {
-                  return View::make('drivers.index');
-                }
+                        //deparing coordinates
+                        public $dlat= NULL;
+                        public $dlng = NULL;
     
-                public function index()
-                {  
-                    $drivers =  Driver::with('user')->get();
-                    $this->Jtable($drivers);
-                }
+                        //arrival coordinates
+                        public $alat= NULL;
+                        public $alng = NULL;
     
-    
-                function oauth2callback()
-                {
-    
-                    echo ' {"web":{"auth_uri":"https://accounts.google.com/o/oauth2/auth","client_secret":"cVFJdpmg7vCarDUeDnFfh9ZE","token_uri":"https://accounts.google.com/o/oauth2/token","client_email":"656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno@developer.gserviceaccount.com","redirect_uris":["http://localhost:8080/oauth2callback"],"client_x509_cert_url":"https://www.googleapis.com/robot/v1/metadata/x509/656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno@developer.gserviceaccount.com","client_id":"656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno.apps.googleusercontent.com","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","javascript_origins":["http://localhost:8080/"]}}';
-                }
-    
-    
-                function get_fastest_route($arr_routes)
-                {
-                    $fastest_route= NULL;
-                    $min_duration =NULL;
-                    foreach($arr_routes as $a_route)
-                    {
-                         $duration = $a_route->legs[0]->duration->value;
-    
-                        if($min_duration == NULL)
-                           $min_duration = $duration;
-    
-                       if($duration < $min_duration)
-                            $min_duration = $duration;
-    
-                    }
-    
-                   foreach($arr_routes as $route)
-                   {
-    
-                       if($route->legs[0]->duration->value == $min_duration)
-                       {
-                            $fastest_route = $route;
-                            break;
-                       }
-                   }
-    
-                   return  $fastest_route;
-    
-                }
-    
-                function driver_trip_find()
-                {   
-                 
-                   //define a var to bind the drivers available for the course adn the approved aone, the one that capacle to arrive at time
-                   $drivers_availbale_for_the_course = [];
-                   $approved_drivers =[];
-
-
-                   $result = NULL;
-                    //where we receive the trip parameter 
-                   $departing = $_GET["departing"];
-                   $arrival = $_GET["arrival"];
-                   //where we receive the departing time so is time and we get the day of week to find in the agenda table of each driver is is working or not
-                   $departing_time  =  $_GET["time"];
-                   $trip_duration = 0;
-                   $trip_distance = 0;
-                   $day=  date('D', strtotime($departing_time));
-    
-                   //estimated arrival by usng google maps
-                   $arrival_time = NULL; 
-    
-                    //echo 'Departing: '.$departing;
-                    //echo '</br>';
-                    //echo 'Arrival: '.$arrival;
-                    //echo '</br>';
-                    //echo 'Departing time : '.$departing_time.' ,'.$day;
-    
-              //      //to find in the agenda table we have to know the arrival_time of the trip,
-                    //because we just have the departing time we have to calc the duration of the trip by using geocode and google directions api.
-    
-                    $param = array("origin"=> $departing, "destination" => $arrival);
-                    $reponse = Geocoder::directions('json', $param);
-    
-                    if($reponse != NULL)
-                        $result = json_decode($reponse);
-    
-                    if($result != NULL)
-                    {
+                        public  $total_trip_time  = 0;
+                        public  $total_trip_distance  = 0;
     
     
-                             //foreach($result->routes as $route)
-                             //{
-                             //    echo $route->legs[0]->duration->value.' Minutess'. floatval( $route->legs[0]->duration->value / 60 );
-                             //   
-                             //    echo '</br>';
-                             //}   
+                        //set default kms and minute cost 
+                        public $km_unit = 2;
+                        public $minute_unit = 2;
     
-                            $route = $this->get_fastest_route($result->routes);
-    
-                            $trip_duration = $route->legs[0]->duration->value;
-                            $trip_distance = $route->legs[0]->distance->value;
+                        public $trys;
     
     
-                            $arrival_time =date('Y-m-d H:i:s',strtotime($departing_time) + $trip_duration);
-                            //echo '</br> Arrival time : '.$arrival_time.' ,'.$day;
-                          
-                            $start_hour = date('H',strtotime($departing_time)).':00';
-                            $end_hour =  date('H',strtotime($departing_time) + $trip_duration).':00';
+             public function dashboard()
+             {
+                             return View::make('drivers.index');
+             }
+    
+             public function index()
+             {  
+                 if(Auth::User()->is_super_admin())
+                     $drivers =  Driver::with('user')->where('active','=', true)->get();
+                 else
+                 {
+                     $company_id = $this->company->id;
+                     $drivers = Driver::with('user')->whereHas('user', function($q) use ($company_id)
+                                 {
+                                     $q->where('company_id', '=', $company_id);
+    
+                                 })->where('active','=', true)->get();
+                 }
+    
+                 $this->Jtable($drivers);
+             }
     
     
-    
-    
-                            $sql ='select drivers.id, drivers.user_id, drivers.company_id, drivers.avatar_url, drivers.created_at,
-                                        drivers.updated_at  ,users_times.start, users_times.end from drivers 
-                                        inner join users_times on (drivers.user_id = users_times.user_id)
-                                        where (users_times.start<= "'.$start_hour.'" and users_times.`end` >= "'.$end_hour.'" and users_times.`day_week` ="'.$day.'") and drivers.id NOT IN(select bookings.driver_id  from bookings
-                                        where
-                                        (bookings.driver_arrival_time between "'.$departing_time .'" and "'.$arrival_time.'" ) or
-                                        (bookings.arrival_date between "'.$departing_time .'" and  "'.$arrival_time.'") or
-                                        (bookings.driver_arrival_time <= "'.$departing_time .'" and bookings.arrival_date >= "'.$arrival_time.'") group by driver_id)';
-    
-    
-    
-    
-                          $drivers = DB::select($sql);
-    
-                         $drivers_availbale_for_the_course = [];
-    
-                        foreach($drivers as $driver)
+               function oauth2callback()
                         {
     
-                            $db_driver = Driver::find($driver->id);
-                            if($db_driver  != NULL)
-                            {
-                                $db_driver->start  = $driver->start;
-                                $db_driver->end  = $driver->end;
-                                //   echo '</br>';
-                                //echo json_encode($db_driver);
-                                //echo '</br>';
-                                array_push($drivers_availbale_for_the_course, $db_driver );
-                            } 
+                            echo ' {"web":{"auth_uri":"https://accounts.google.com/o/oauth2/auth","client_secret":"cVFJdpmg7vCarDUeDnFfh9ZE","token_uri":"https://accounts.google.com/o/oauth2/token","client_email":"656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno@developer.gserviceaccount.com","redirect_uris":["http://localhost:8080/oauth2callback"],"client_x509_cert_url":"https://www.googleapis.com/robot/v1/metadata/x509/656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno@developer.gserviceaccount.com","client_id":"656391148071-a2ai7qrb7v0jb1gq09r1alsd1gul2pno.apps.googleusercontent.com","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","javascript_origins":["http://localhost:8080/"]}}';
                         }
-                    }
     
     
-                    $today =  date('Y-m-d', strtotime($departing_time));
-    
-    
-    
-                    $drivers_prev_next = [];
-    
-    
-    
-                    foreach($drivers_availbale_for_the_course as $driver)
-                    { 
-    
-                        //we need the default driver point when drivers has no trips to do, tis means that driver should be on the garage (company)
-                       $prev = new MapPoint(49.599224, 6.133164999999963, 'Luxembourg Gare Centrale quai 13, Luxemburgo', $driver->start);
-                       $next = new MapPoint(49.599224, 6.133164999999963, 'Luxembourg Gare Centrale quai 13, Luxemburgo', $driver->end);
-                       //echo '</br>';
-                       //echo $driver->id;
-    
-    
-                       $booking_before = Booking::where('driver_id','=',$driver->id)
-                       ->where('arrival_date','>=',  $today) // all bookings where arrival is to
-                       ->where('arrival_date','<', $departing_time)
-                       ->orderBy('arrival_date', 'desc')->first();
-    
-    
-                      $booking_after = Booking::where('driver_id','=',$driver->id)
-                      ->where('driver_arrival_time','>=',  $today)
-                      ->where('driver_arrival_time','>', $arrival_time)
-                      ->where('driver_arrival_time','>=',  $today)->orderBy('driver_arrival_time', 'asc')->first();
-    
-    
-    
-                     //if user has not a booking after for today that means that he is one the garage
-                     if(count($booking_before) ==1)
-                       $prev = new MapPoint($booking_before->arrival_point_lat, $booking_before->arrival_point_lng, $booking_before->arrival_address, $booking_before->arrival_date);
-    
-                     if(count($booking_after)==1)
-                        $next = new MapPoint($booking_after->departing_point_lat, $booking_after->departing_point_lng, $booking_after->departing_address, $booking_after->driver_arrival_time);
-    
-    
-                        $driver_point = new DriverPoint($driver->id, $prev, $next);
-    
-                        array_push($drivers_prev_next, $driver_point);
-                    }   
-    
-     // echo '</br>';
-    //
-     //// echo $sql;
-     //   echo '</br>';
-    
-                 //now for each driver we have is last position and next position
-                 //to calculate the driver tha is more close for the new trip we have to think
-                 //so
-                 // all this drivers are been picked beacuse they got an interval in they agenda to do the job
-                 //but doees not mean that we can do it, because depende on distance that the driver is from the job
-                 //if is to much far it wil possible that we cannot arrive at time to do the job because we sent the tim,e detect for foind the couse in the trip to arrive to job
-                 //but must important is the prev position, that is the positoin where the driver was when finnishid the last trip
-                 // and next positonwhere driver will be next
-                 //if they have no trip, last and next will be the garage or park place
-                 // Calculatio is made by evaluating the distance , or time where the taxi is ffrom the new job
-                 //of couse we have to take the one thta is more close
-                 //but not ever the one that is more close is the best one
-                 //but also the anos that have jobs after of before where the routes are passing trhougth new point
-                 //Imagine you have a TRIP from PARIS - Crawley, West Sussex UK 10:30 - 14:30
-                 // DRIVER 1 100 KM from PARIS at SOUTH
-                 // DRIVER 2 200 KM from PARIS at SOUTH
-                 // WILL THINK DRIVER 1 is the most close in time and distance
-    
-                 //BUT DRIVER 2 was job at 19:00 from    LONDON -> OXFORD the values is just for perpective, couse no nobody will take a driver from france to make a trip ion UK
-                 //but what is small is in big
-                 //so if you make calculations to make the new job for driver 1 that will be imagining that central of company is in paris
-                 // 100 KM to PARIS + 452 KM to Crawley, West Sussex + 462 KM to came back to company Paris =>> 924 KM , we have to do 904 Km to do this job, because 100 KM is for going to  company
-                 //and we have always to return to company at end of the day, so if we has at 100 km from paris we have to 100 km
-                 //if you look at driver 2 one thing is sure we must to PARIS TO LONDON to make the TRIP LONDON -> OXFORD
-                 //200 KM to PARIS + 452 KM to London  that is 652 KM -> that we have to do
-    
-                //but if accept the job PARIS Crawley WE WILL DO
-                // 200 to paris + 462 to Crawley + 50 km to london = 712 to arrive to OXFORD or next
-                // when you compare driver 1 that is at 100 KM from paris and Driver 2 that is at 200
-                // the KM spend to the trip are to much less for the driver 2, cause is to the direction of the current job
-                // before is was doint 652 KM to do is job, if we accept will do 712, more 60 KM
-                // thats the diference from prev to next driver 1   is 100 KM to garage if accept we have to to do more 824 KM to do this job
-                // driver from prev 200 Km south  to next to London is 652
-                // if accept it will be 200 + 462 + 50  will do just 60 KM more or 764  less that driver 1 beacause is goind in the direction to of the current job
-    
-                   // will store ID's from drivers that can do the courses
-                 
-                   foreach($drivers_prev_next as $driver_pos)
-                   {
-                        //echo "Making calc for driver" + $driver_pos->id;
-                        $param = array("origin"=> $driver_pos->prev->location, "destination" => $driver_pos->next->location);
-                        $reponse = Geocoder::directions('json', $param);
-    
-    
-                        $default_trip_time =0;
-                        $default_trip_distance =0;
-    
-    
-                        $distance_to_trip =0;
-                        $duration_to_trip =0;
-    
-                        $distance_to_next =0;
-                        $duration_to_next =0;
-    
-                        $driver_can_do = TRUE;
-    
-                        if($reponse != NULL)
-                        {
-                            $result = json_decode($reponse);
-    
-                            if($result != NULL)
-                            {
-                             //  echo '</br>';
-                               $route = $this->get_fastest_route($result->routes);
-                           
-                               $default_trip_time = $route->legs[0]->duration->value;
-                                 
-                               $default_trip_distance= $route->legs[0]->distance->value;
-                            //   echo 'FROM '.$driver_pos->prev->location.' TO'.$driver_pos->next->location.' is: '.$route->legs[0]->distance->text.' and takes : '.floatval($default_trip_time/60).' minutes';
-    
-    
-    
-                              $param = array("origin"=> $driver_pos->prev->location, "destination" => $departing);
-                              $reponse = Geocoder::directions('json', $param);
-    
-                               if($reponse != NULL)
-                               {
-                                    $result = json_decode($reponse);
-    
-                                    if($result != NULL)
-                                    {
-                                        $route = $this->get_fastest_route($result->routes);
-                                     //   echo '</br>';
-                                        $duration_to_trip = $route->legs[0]->duration->value;
-                                        $distance_to_trip= $route->legs[0]->distance->value;
-    
-                                         $driver_time_arrival =  date('Y-m-d H:i:s',strtotime($driver_pos->prev->time) + $duration_to_trip);
-    
-                                        //echo 'FROM DRIVER POS '.$driver_pos->prev->location.' AT '.$driver_pos->prev->time.' TO TRIP => '.$departing.' is: '.$route->legs[0]->distance->text.' and takes : '.floatval($duration_to_trip/60).' minutes , driver will arrive at '.$driver_time_arrival;
-    
-  
-                                         if(strtotime($driver_time_arrival) > strtotime($departing_time))
-                                           $driver_can_do = FALSE;
-                                         else
-                                           $driver_can_do = TRUE;
-    
-    
-    
-                                         if($driver_can_do)
-                                         {
-    //asd ff
-                                             $param = array("origin"=>$arrival, "destination" => $driver_pos->next->location);
-                                             $reponse = Geocoder::directions('json', $param);
-    
-                                             if($reponse != NULL)
-                                             {
-                                                $result = json_decode($reponse);
-    
-                                                if($result != NULL)
-                                                {
-                                                    $route = $this->get_fastest_route($result->routes);
-                                                    //echo '</br>';
-                                                    $duration_to_next  = $route->legs[0]->duration->value;
-                                                    $distance_to_next= $route->legs[0]->distance->value;
-    
-                                                    $driver_time_arrival =  date('Y-m-d H:i:s',strtotime($arrival_time) + $duration_to_next);
-    
-    
-                                                    //echo "TRIP ARRIVAL->'.$arrival_time.' -> DRIVER ARRIVAL TIME ".$driver_time_arrival.' '.$route->legs[0]->duration->value.' seconds plus </br>';
-                                                    //echo 'FROM TRIP '.$arrival.' TO NEXT DRIVER POS => '.$driver_pos->next->location.' SHOULD ARRIVE AT '.$driver_pos->next->time.' and  is: '.$route->legs[0]->distance->text.' and takes : '.floatval($duration_to_next/60).' minutes';
-    
-    
-                                                  if(strtotime($driver_time_arrival) <= strtotime($driver_pos->next->time))
-                                                  { 
-                                                      $total_time_spent= $duration_to_trip + $duration_to_next + $default_trip_time;
-                                                      //echo '</br>';
-                echo $aa;
-                                                      //echo 'Distance to NEXT: '.$distance_to_next; echo '</br>';
-                                                      //echo  'TRIP DIstance'.$trip_distance;
-                                                      $total_distance = $distance_to_trip + $distance_to_next + $trip_distance;
-                                                      //echo 'Distance to trip: '.$distance_to_trip; echo '</br>';
-                                                      //echo "</br> TOTAL TIME SPENT TO MAKE THE NEW TRIP: ".floatval($total_time_spent/60);
-                                                      //echo "</br> TOTAL DISTANCE SPENT TO MAKE THE NEW TRIP: ".floatval( $total_distance/1000);
-                                                      //echo '</br>ORIGINAL TRIP DISTANCE : '.$default_trip_distance;
-                                                      //echo '</br>NEW TRIP DISTANCE: '.$total_distance;
-                                                      //echo "</br> TOTAL DISTANCE PLUS: ".($total_distance -$default_trip_distance)/1000;
-                                                      
-                                                      $driver_pos->original_time = $default_trip_time;
-                                                      $driver_pos->new_trip_time = $total_time_spent;
-                                                      $driver_pos->total_time_plus = ($total_time_spent - $default_trip_time);
+                function compute_distance()
+                {
+                    $SphericalGeometry = new SphericalGeometry();
+                    if(isset($_GET['point_a']))
+                        $point_a =  json_decode($_GET['point_a']);
 
-                                                      $driver_pos->original_distance = $default_trip_distance;
-                                                      $driver_pos->new_trip_distance = $total_distance;
-                                                      $driver_pos->total_distance_plus = ($total_distance - $default_trip_distance);
-                                                      array_push($approved_drivers, $driver_pos);
-                                                  }
+                    if(isset($_GET['point_b']))
+                        $point_b =  json_decode($_GET['point_b']);
+
+                    
+                    $a_point = new LatLng($point_a->lat, $point_b->lng, false);
+                    $b_point = new LatLng($point_a->lat, $point_b->lng, false);
+                    $distance =  $SphericalGeometry->computeDistanceBetween($a_point, $b_point);
+                    
+                    
+                    return $distance;
+    
+               }
+    
+
+               
+                function compute_distance2($point_a, $point_b)
+                {
+                    $SphericalGeometry = new SphericalGeometry();
+                
+                    $distance =  $SphericalGeometry->distance($point_a, $point_b);
+                    
+                    
+                    return $distance;
+    
+               }
+                function get_less_time_route($routes)
+                {
+    
+                           $less_time_route = NULL;
+    
+                           foreach($routes as $route)
+                           {
+                               if($less_time_route == NULL)
+                                 $less_time_route = $route;
+    
+                               if($route->legs[0]->duration->value < $less_time_route->legs[0]->duration->value)
+                                 $less_time_route = $route;
+                           }
+    
+                           return  $less_time_route;
+    
+                }
+    
+                public function trip_find_availablibility()
+                 {  
+                          $route_origin= NULL;
+    
+                          $booking = json_decode(json_encode($_GET["trip"]));
+    
+                        
+    
+                           // for the case of A TRIP O A --> B
+                           // we dont know the duration of the course to evaluate the agenda of each driver
+                           //because we have to if the driver is available for a course.
+                           //base of alghorithm
+    
+                           //STEP 1
+                           //we find drivers that have a disponiblities from the departing time to the arrival _time
+                           //if a customer wants to from paris  at 10:00, we get from google apis the distance and duration  ex: 30 min
+                           //and we will find all driver that dont have any nothing to do from 10:00 to 10:30
+    
+    
+                           $booking = $this->get_drivers_available_for_the_course_by_agenda($booking);
+    
+    
+                          if(count(Auth::user()) > 0)
+                          {
+                             $booking = Auth::user()->Customer->check_agenda($booking, TRUE);
+                                if($booking->status == FALSE)
+                                {
+                                    echo json_encode($booking);
+                                    return;
+                                }
+                          }
+    
+    
+                           //STEP 2
+                           //because a driver can have diferet positions, on garage or on the street (in, out)
+                           //in -> means not working or on the gare, garage
+                           //out means is doing a job, or is just stoped somewhere waiting for a new trip, or at least is comming home or in
+                           // the fact of a driver has availability from 10:: to 10:30 does means thaa is conditions to do the job, cause i we said we drivers can be somehere
+                           //and we dont know if the driver has time to arrive to trip proposed from the system
+                           //so we have have to set the for the drivers a the last and the next position
+                           //The RULE is follow:
+                           //To calc the time to arrive to the the current trip, we have to know the last postion, if a driver is on garage is postion is in
+                           //but we have to know also the next postion, cause driver can have time to arrive but no time to make the next trip
+                           //to KNOW we calc
+                           //the time we have to do the follow cals
+                           //TIME FROM PREVIOUS POSTITION TO CURRENT
+                           //TIME TO MAKE THE COURSE
+                           //TIME TO ARRIVE TO NEXT COURSE
+    
+                          // so will set the prev and next positons
+                          //this method foes to database and look if driver has a trip before and trip after if not that menas is home
+                          //Driver can have a trip before out and a trip after out
+                          //Driver can have also a trip before in (Menas is on garage) and a trip after out
+                          //Driver can have also a trip before out and a trip after oto garage in
+                          //driver can also a have a trip before in (emans is on garage) and a trip after( on garage) in this case menas that ones thas not have any job at the current time
+    
+                          $booking = $this->get_drivers_prev_next($booking);
+     
+                           //now we get the positions we gonna to the calcultaion to find each one is capable from the the current position to arrive at time to the trip
+                           // and also if is capable to arrive on time to next trip
+                          $booking = $this->get_drivers_that_can_do_the_course($booking);
+                          $booking->tva = $this->company->tva; 
+    
+                          $booking  = $this->get_offers($booking);
+                          echo json_encode($booking);
+    
+                }
+  
+    
+    
+    
+    
+                function get_geo_info_from_A_to_B($point_a, $point_b)
+                {
+                            $trip_info = new TripInfo();
+                            $trip_info->departing = $point_a;
+                            $trip_info->arrival = $point_b;
+    
+                            $param = array("origin"=> $point_a , "destination" =>  $point_b);
+                            $reponse = Geocoder::directions('json', $param);
+    
+                             if($reponse != NULL)
+                             {
+                                  $result = json_decode($reponse);
+    
+                                  $route = $this->get_less_time_route($result->routes);
+    
+                                  if($route != NULL)
+                                  {
+                                      $trip_info->distance = $route->legs[0]->distance->value;
+                                      $trip_info->duration = $route->legs[0]->duration->value;
+                                      $trip_info->route = $route;
+                                  }
+                                  else
+                                  {
+                                      $this->trys = $this->trys +1;
+                                      if( $this->trys < 3)
+                                         $this->get_geo_info_from_A_to_B($point_a, $point_b);
+                                  }
+                             }
+    
+                             return $trip_info;
+                 } 
+    
+    
+    
+                 function get_drivers_available_for_the_course_by_agenda($booking)
+                 {
+    
+    
+                     $booking->driver_arrival_time = date('Y-m-d H:i:s',strtotime('-15 minutes', strtotime($booking->departing_time)));     
+                     $booking->today = date('Y-m-d',strtotime($booking->driver_arrival_time));
+    
+                     $booking->day =   date('D',strtotime($booking->driver_arrival_time));
+                     $booking->today_end = date('Y-m-d H:i:s',strtotime($booking->today.' 23:59:59'));
+                     $booking->duration = 0;
+    
+                     if(isset($booking->arrival) && strlen($booking->arrival) > 0)
+                     {
+    
+                         $param = array("origin"=> $booking->departing, "destination" => $booking->arrival);
+                         $reponse = Geocoder::directions('json', $param);
+    
+                         if($reponse != NULL)
+                         {
+    
+                             $result = json_decode($reponse);
+    
+                             if($result != NULL)
+                             {  
+    
+                                 $route = $this->get_less_time_route($result->routes);
+    
+    
+                                 $booking->duration = $route->legs[0]->duration->value;
+                                 $booking->distance = $route->legs[0]->distance->value;
+                                 $booking->arrival_time =  date('Y-m-d H:i:s',strtotime('+'. $booking->duration.' seconds', strtotime($booking->departing_time))); 
+    
+                                 $booking->departing_date = date('Y-m-d',strtotime($booking->driver_arrival_time));
+                                 $booking->arrival_date = date('Y-m-d',strtotime($booking->arrival_time));
+    
+    
+                                 $booking->start_hour = date('H:i',strtotime($booking->driver_arrival_time));
+                                 $booking->end_hour =  date('H:i',strtotime($booking->arrival_time));
+    
+    
+                                 //echo $booking->arrival_time.' | '.$booking->today_end;
+                                 if(strtotime($booking->arrival_time) > strtotime($booking->today_end))
+                                 {
+                                          $booking->today_end_hour = date('H:i',strtotime($booking->today_end));
+                                          $booking->next_day = date('Y-m-d',strtotime($booking->arrival_time));
+                                          $booking->next_day_hour = date('H:i',strtotime($booking->next_day .' 00:00:00'));
+                                          $booking->day_next = date('D',strtotime($booking->next_day));
+    
+    
+                                        $sql ='select drivers.id, drivers.user_id, drivers.avatar_url, drivers.created_at,
+                                             drivers.updated_at ,users_times.start, users_times.end from drivers 
+                                             inner join users_times on (drivers.user_id = users_times.user_id) 
+                                             inner join users on (users.id = drivers.user_id) 
+                                             where (users_times.start <= "'.$booking->start_hour.'" and users_times.`end` >= "'.$booking->today_end_hour.'" and users_times.`day_week` ="'.$booking->day.'") and users.company_id='.$this->company->id.' 
+                                             and drivers.active=true  and drivers.id IN(select drivers.id  from drivers inner join users_times on (drivers.user_id = users_times.user_id) 
+                                             where  (users_times.start <= "'.$booking->next_day_hour.'" and users_times.`end` >= "'.$booking->end_hour.'" and users_times.`day_week` ="'.$booking->day_next.'")) 
+                                             and drivers.id NOT IN(select bookings.driver_id from bookings
+                                             where (bookings.driver_arrival_time between "'.$booking->driver_arrival_time .'" and "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.' ) or
+                                             (bookings.arrival_date between "'.$booking->driver_arrival_time .'" and  "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') or
+                                             (bookings.driver_arrival_time <= "'.$booking->driver_arrival_time .'" and bookings.arrival_date >= "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') group by driver_id)';
+    
+    
+    
+                                 }
+                                 else
+                                 { 
+    
+                                        $sql ='select drivers.id, drivers.user_id, drivers.avatar_url, drivers.created_at,
+                                                 drivers.updated_at  ,users_times.start, users_times.end from drivers 
+                                                 inner join users_times on (drivers.user_id = users_times.user_id)
+                                                  inner join users on (users.id = drivers.user_id) 
+                                                 where (users_times.start <= "'.$booking->start_hour.'" and users_times.`end` >= "'.$booking->end_hour.'" and users_times.`day_week` ="'.$booking->day.'" ) 
+                                                 and users.company_id='.$this->company->id.' and drivers.active=true and drivers.id NOT IN(select bookings.driver_id  from bookings
+                                                 where (bookings.driver_arrival_time between "'.$booking->driver_arrival_time .'" and "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.' ) or
+                                                 (bookings.arrival_date between "'.$booking->driver_arrival_time .'" and  "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') or
+                                                 (bookings.driver_arrival_time <= "'.$booking->driver_arrival_time .'" and bookings.arrival_date >= "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') group by driver_id)';
+    
+    
+    
+                                  }
+    
+                                 $booking->drivers = DB::select($sql);
+                                 }
+                             }
+                         }
+                     else
+                     {
+                         if($booking->calc_method == 1)
+                         {
+                             $booking->duration = 1.2 * $booking->kms * 60;
+                             $booking->distance = $booking->kms * 1000;
+                         }
+                         else
+                         {
+                             $booking->duration = $booking->minutes * 60;
+                             $booking->distance = 1.6 * $booking->minutes * 1000;
+                         }
+    
+                             $booking->arrival_time =  date('Y-m-d H:i:s',strtotime('+'. $booking->duration.' seconds', strtotime($booking->departing_time))); 
+    
+                             $booking->departing_date = date('Y-m-d',strtotime($booking->driver_arrival_time));
+                             $booking->arrival_date = date('Y-m-d',strtotime($booking->arrival_time));
+    
+                             $booking->start_hour = date('H:i',strtotime($booking->driver_arrival_time));
+                             $booking->end_hour =  date('H:i',strtotime($booking->arrival_time));
+    
+                          $sql='';
+                          if(strtotime($booking->arrival_time) > strtotime($booking->today_end))
+                          {
+    
+    
+                             $booking->today_end_hour = date('H:i',strtotime($booking->today_end));
+                             $booking->next_day = date('Y-m-d',strtotime($booking->arrival_time));
+                             $booking->next_day_hour = date('H:i',strtotime($booking->next_day .' 00:00:00'));
+                             $booking->day_next = date('D',strtotime($booking->next_day));
+    
+    
+                                        $sql ='select drivers.id, drivers.user_id, drivers.avatar_url, drivers.created_at,
+                                             drivers.updated_at ,users_times.start, users_times.end from drivers inner join users_times 
+                                             on (drivers.user_id = users_times.user_id)
+                                              inner join users on (users.id = drivers.user_id)  
+                                             where (users_times.start <= "'.$booking->start_hour.'" and users_times.`end` >= "'.$booking->today_end_hour.'" and users_times.`day_week` ="'.$booking->day.'") 
+                                             and drivers.active=true and users.company_id='.$this->company->id.' and drivers.id IN(select drivers.id  from drivers inner join users_times on (drivers.user_id = users_times.user_id) 
+                                             where  (users_times.start <= "'.$booking->next_day_hour.'" and users_times.`end` >= "'.$booking->end_hour.'" and users_times.`day_week` ="'.$booking->day_next.'")) 
+                                             and drivers.id NOT IN(select bookings.driver_id from bookings
+                                             where (bookings.driver_arrival_time between "'.$booking->driver_arrival_time .'" and "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') or
+                                             (bookings.arrival_date between "'.$booking->driver_arrival_time .'" and  "'.$booking->arrival_time.'"  and bookings.company_id='.$this->company->id.') or
+                                             (bookings.driver_arrival_time <= "'.$booking->driver_arrival_time .'" and bookings.arrival_date >= "'.$booking->arrival_time.'" and bookings.company_id='.$this->company->id.') group by driver_id)';
+    
+    
+                          }
+                          else
+                          {
+    
+                             $sql ='select drivers.id, drivers.user_id, drivers.company_id, drivers.avatar_url, drivers.created_at,
+                                     drivers.updated_at  ,users_times.start, users_times.end from drivers 
+                                     inner join users_times on (drivers.user_id = users_times.user_id)
+                                     inner join users on (users.id = drivers.user_id) 
+                                     where (users_times.start <= "'.$booking->start_hour.'" and users_times.`end` >= "'.$booking->end_hour.'" and users_times.`day_week` ="'.$booking->day.'") 
+                                     and drivers.active=true and users.company_id='.$this->company->id.' and drivers.id NOT IN(select bookings.driver_id  from bookings
+                                     where (bookings.driver_arrival_time between "'.$booking->driver_arrival_time .'" and "'.$booking->arrival_time.'" and bookings.payed = 1 and bookings.company_id='.$this->company->id.') or
+                                     (bookings.arrival_date between "'.$booking->driver_arrival_time .'" and  "'.$booking->arrival_time.'  and bookings.payed = 1" and bookings.company_id='.$this->company->id.') or
+                                     (bookings.driver_arrival_time <= "'.$booking->driver_arrival_time .'" and bookings.arrival_date >= "'.$booking->arrival_time.'"  and bookings.payed = 1 and bookings.company_id='.$this->company->id.') group by driver_id)';
+    
+    
+                         }
+                         $booking->drivers = DB::select($sql);
+                     }
+    
+                     return $booking;
+    
+                 }
+    
+    
+    
+                 function get_drivers_prev_next($booking)
+                 {
+    
+                     foreach($booking->drivers as $driver)
+                     { 
+    
+                         //we need the default driver point when drivers has no trips to do, tis means that driver should be on the garage (company)
+                         $prev = new MapPoint($this->company->lat, $this->company->lng, $this->company->address, $booking->today.' '.$driver->start, 'in');
+                         $next = new MapPoint($this->company->lat, $this->company->lng, $this->company->address, $booking->today.' '.$driver->end , 'in');
+    
+    
+                         //will find first booking before
+                         $booking_before = Booking::where('driver_id','=',$driver->id)
+                               ->where('arrival_date','>=',  $booking->departing_date) // all bookings where arrival is to
+                               ->where('payed','=', 1)
+                               ->where('arrival_date','<', $booking->driver_arrival_time)
+                               ->orderBy('arrival_date', 'desc')->first();
+    
+    
+    
+                         //will find booking next
+                         $booking_after = Booking::where('driver_id','=',$driver->id)
+                             ->where('driver_arrival_time','>', $booking->arrival_date)
+                             ->where('payed','=', 1)
+                             ->where('driver_arrival_time','>=',  $booking->driver_arrival_time)->orderBy('driver_arrival_time', 'asc')->first();
+    
+    
+                          //if user has not a booking before for today that means that he is one the garage
+                         if(count($booking_before) ==1)
+                               $prev = new MapPoint($booking_before->arrival_point_lat, $booking_before->arrival_point_lng, $booking_before->arrival_address, $booking_before->arrival_date, 'out');
+    
+                         if(count($booking_after)==1)
+                                $next = new MapPoint($booking_after->departing_point_lat, $booking_after->departing_point_lng, $booking_after->departing_address, $booking_after->driver_arrival_time,'out');
+    
+    
+    
+                         $driver->prev = $prev;
+                         $driver->next = $next;
+    
+                         if(count($booking_before) == 1 || count($booking_after) ==1)
+                         {
+    
+                             if(count($booking_before) ==1)
+                                 $driver->cars =  Car::find($booking_before->car_id)->first();
+                             else
+                                $driver->cars =  Car::find($booking_after->car_id)->first();
+    
+                         }
+                         else
+                         {
+                                $driver->cars  = [];
+    
+                         }   
+    
+                     }
+    
+                     return $booking;
+                 }
+    
+    
+    
+                function get_drivers_that_can_do_the_course($booking)
+                { 
+                     $drivers_available =[];
+                     foreach($booking->drivers as $driver)
+                     {   
+    
+    
+                                  //we have to save total spent time for each driver
+                                  $total_time  = 0;
+                                  $total_distance  = 0;
+    
+    
+    
+                                  // We get the time that the driver takes to arrive to the departing location
+                                  $trip_info_departing = $this->get_geo_info_from_A_to_B($driver->prev->location, $booking->departing); 
+    
+    
+                                  $total_time =  $total_time + $trip_info_departing->duration + $booking->duration; 
+                                  $total_distance =  $total_distance + $trip_info_departing->distance + $booking->distance; 
+    
+                                  //  $total_time =  $total_time + $trip_info_departing->duration + $booking->duration; 
+                                  //$total_distance =  $total_distance + $trip_info_departing->distance + $booking->distance; 
+                                  //we get the driver arrival time by using the duration of the course
+                                  $driver->recomended_departing_time =  date('Y-m-d G:i:s',  strtotime('-'.$trip_info_departing->duration.' seconds', strtotime($booking->driver_arrival_time)));
+    
+    
+                                  //if the arrival date is before the departing time we follow the algorithm else we discard this driver
+                                  if(strtotime($driver->recomended_departing_time) >= strtotime($driver->prev->time)) 
+                                  {
+    
+                                      //Now we have to check if i got the time to make the course and arrive to the enxt course
+                                      //by this we have to check how much is from the customer arrival place to the next trip
+                                      // so if trip next is out ->menas user has a next trip we check
+                                      $time_to_arrive_next = NULL;
+                                      $is_driver_able_to_arrive = FALSE;
+    
+                                      $trip_duration = NULL;
+                                      if(empty($this->arrival))
+                                      { 
+    
+    
+    
+                                              $trip_info_next = $this->get_geo_info_from_A_to_B($booking->departing, $driver->next->location); 
+                                              //time to arrive to next
+                                              //if we dont know arrival that means time will  the time of rent * 2 to give time to comme back to departing position
+                                              //beacuse this is the unique position that we have has reference.., from there we summ the time to arrive to next
+                                              // and we get an estimation of time that can arrive and max, at minimum we dont know at moment
+                                              $time_to_arrive_next =  date("Y-m-d G:i:s", strtotime("+".($trip_info_next->duration +  ($booking->duration * 2))." seconds" , strtotime($booking->departing_time)));
+    
+                                      }
+                                      else
+                                      {        
+                                         $trip_info_next = $this->get_geo_info_from_A_to_B($booking->arrival, $driver->next->location); 
+                                         $time_to_arrive_next =  date("Y-m-d G:i:s", strtotime("+".($trip_info_next->duration)." seconds", strtotime($booking->arrival_time)));
+                                      }  
+    
+                                      if($booking->trip_method == 'TAB')
+                                      {
+                                             $driver->total_trip_time = $trip_info_departing->duration  + $booking->duration  + $trip_info_next->duration;
+                                             $driver->total_trip_distance = $trip_info_departing->distance  + $booking->distance  + $trip_info_next->distance;
+                                      }
+                                      else
+                                      {
+                                             $driver->total_trip_time = $trip_info_departing->duration  + ($booking->duration  * 2) + $trip_info_next->duration;
+                                             $driver->total_trip_distance = $trip_info_departing->distance  + ($booking->distance * 2)  + $trip_info_next->distance;
+                                      }
+    
+    // echo $time_to_arrive_next.'|'.$driver->next->time.'</br>';
+                                     if(strtotime($time_to_arrive_next) < strtotime($driver->next->time) || $driver->next->tag == 'in')
+                                             $is_driver_able_to_arrive = TRUE;
+    
+    
+    
+    
+                                     if($is_driver_able_to_arrive)
+                                     {
+    
+                                         //set driver cars 
+                                         if(count($driver->cars) > 0)
+                                         {
+    
+                                             $cars =  Car::find($driver->cars->id)->first();
+                                             array_push($driver->cars , $cars);
+                                         }
+                                         else
+                                         {
+    
+    
+                                             //if a driver has not a car that means he has no books in day of the trip, so we is on garage
+                                             //if we is on garage wew can talke any car that are not used 
+                                             //this cars atha user can drive, the cars that arrived before the course 
+                                             //all cars where driver_departing_time is less then the trip are used
+                                             //all cars where driver_departing_time i less then arrival_time  are used
+                                             // so we take all cars that are not used  before the end of the trip
+                                             $sql='select * from cars 
+                                                 inner join drivers_cars on (cars.id= drivers_cars.car_id) 
+                                                 inner join drivers on (drivers.id = drivers_cars.driver_id)
+                                                 where drivers_cars.car_id 
+                                                 NOT IN( select bookings.car_id from bookings where bookings.driver_departing_time < "'.$booking->arrival_time.'" 
+                                                 and bookings.arrival_date >= "'.$driver->recomended_departing_time.'" and bookings.driver_id !='.$driver->id.') and cars.company_id = '.$this->company->id.' and drivers_cars.driver_id='.$driver->id.' group by drivers_cars.car_id';
+    
+    
+                                             $driver->cars = [];
+                                             $cars = DB::select($sql);
+                                             $driver->cars = $cars;
+                                         }
+    
+                                         if(count($driver->cars) > 0)
+                                             array_push($drivers_available , $driver);
+                                     }
+    
+                               }
+                          }
+    
+                     //$driver_lower_time = NULL;
+    
+                     //foreach($booking->drivers as $driver)
+                     //{
+                     //    if($driver_lower_time == NULL)
+                     //        $driver_lower_time = $driver;
+                     //    
+                     //    if( $driver->total_trip_time < $driver_lower_time->total_trip_time)
+                     //        $driver_lower_time = $driver;
+    
+                     //}
+    
+                     //$booking->drivers = [];
+                     //array_push($booking->drivers, $driver_lower_time);
+                     $booking->drivers = $drivers_available;
+                     return $booking; 
+    
+                }
+    
+    
+                function get_offers($booking)
+                {
+                    $all_offers = [];
+    
+                 // echo json_encode($booking->drivers);
+                    foreach($booking->drivers as $driver)
+                    {
+    
+    
+                         $cars  =[];
+    
+                         foreach($driver->cars as $car)
+                             array_push($cars, $car->car_id);
+    
+    
+                        $cars_string =  implode(",", $cars);
+    
+                        $sql = "select * from offers 
+                                inner join offers_drivers as drivers on (drivers.offer_id = offers.id)
+                                inner join offers_cars as cars on (cars.offer_id = offers.id)
+                                where drivers.driver_id IN (".$driver->id.")
+                                and cars.car_id IN (".$cars_string.") and  offers.company_id=".$this->company->id." group by offers.id";
+    
+    
+    
+                        $offers = DB::select($sql);
+    
+
+                       
+                        foreach($offers as $offer)
+                        {
+    
+                               $found_offer = FALSE;
+                               foreach($all_offers as $existing_offer)
+                               {
+    
+                                   if($existing_offer->id == $offer->id)
+                                   {
+                                        $found_offer = TRUE;
+    
+                                        foreach($driver->cars as $car)
+                                        {
+    
+                                            $offer_car = OfferCar::where('car_id', '=', $car->id)
+                                                ->where('offer_id', '=', $offer->id)->get()->first();
+    
+    
+    
+                                            if(count($offer_car) > 0)
+                                            {
+    
+                                                $fount_car = FALSE;
+    
+                                                foreach($existing_offer->cars as $existing_car)
+                                                {  
+    
+                                                     if($existing_car->id == $offer_car->Car->id)
+                                                        $fount_car = TRUE;
     
                                                 }
     
-                                           }
+                                                if($fount_car == FALSE)
+                                                   array_push($existing_offer->cars, $offer_car->Car);
+                                            }
     
                                         }
     
-                                    }
+                                        array_push($existing_offer->drivers , $driver);
+    
+                                   }
+    
     
                                }
-                            }
     
-                       }
-                        //echo '</br>';
+                               if($found_offer == FALSE)
+                               {     
+                                   $offer->cars = [];
+                                   $offer->drivers = [];
+                                   array_push($offer->drivers, $driver);
+                                   foreach($driver->cars as $car)
+                                   {
+                                       $offer_car = OfferCar::where('car_id', '=', $car->car_id)
+                                                ->where('offer_id', '=', $offer->id)->get()->first();
+    
+    
+                                       if(count($offer_car) > 0)
+                                       {
+    
+                                           array_push($offer->cars , $offer_car->Car);
+                                       }
+                                   }
+    
+                                   array_push($all_offers, $offer);
+                                  
+                               }
+    
+                        }
+    
+    
+                    }
+    
+    
+                   $booking->offers = [];
+                   $offre_prioritaires = [];
+                   $offre_normal = [];
+    
+                   foreach($all_offers as $offer)
+                   {
+                         $reference_point = new  LatLng($offer->dlat, $offer->dlng);
+                         $point = new  LatLng($booking->dlat,  $booking->dlng);
+                         $distance_from_departing_offer = $this->compute_distance2($reference_point, $point);
+    
+                         //echo $booking->trip_method.'-'.$offer->trip_method;
+                         if($booking->trip_method == 'TAB' && $offer->trip_method == 'TAB')
+                         {
+    
+                              $reference_point = new  LatLng($offer->alat, $offer->alng);
+                              $point = new  LatLng($booking->alat,  $booking->alng);
+                              $distance_from_arrival_offer = $this->compute_distance2($reference_point, $point);
+                              //echo $offer->title.'->'.$distance_from_departing_offer.'--'.$offer->radiusd.'   |   '.$distance_from_arrival_offer.' | '.$offer->radiusa.'</br>';
+    
+                              if($distance_from_departing_offer < $offer->radiusd && $distance_from_arrival_offer < $offer->radiusa)
+                                  array_push($offre_prioritaires, $offer);
+    
+                              if($distance_from_departing_offer < $offer->radiusd && $distance_from_arrival_offer > $offer->radiusa)
+                                  array_push($offre_normal, $offer);
+                         }
+                         else
+                         {      
+                             if($distance_from_departing_offer < $offer->radiusd)
+                             {   
+    
+    
+    
+                                 //Si le book et du ype TAB ça vveux dire ici que OFFRE es d'un autre type, donc elle n'es pas prioritaire
+                                 if($booking->trip_method == 'TAB')
+                                     array_push($offre_normal, $offer);
+                                 else
+                                 {
+                                     // se l'ffre et du type TAB alors le voayge n'es pas alors, sinon l'ffre es du mem type
+                                      if($offer->trip_method == 'TAB')
+                                         array_push($offre_normal, $offer);
+                                      else
+                                        array_push($offre_prioritaires, $offer);
+    
+                                 } 
+                             }
+                         }
+    
                    }
-
-                   echo json_encode($approved_drivers);
-                    //echo json_encode($drivers_availbale_for_the_course);
+    
+                  foreach($offre_prioritaires as $offer)
+                     array_push($booking->offers, $offer);
+    
+                  foreach($offre_normal as $offer)
+                     array_push($booking->offers, $offer);
+    
+    
+                  return $booking;
                 }
     
-                function availablibility()
-                {
+                 function set_drivers_times($drivers_data)
+                 {
+                     $drivers = [];
+                            foreach($drivers_data as $driver)
+                            {
     
-                   $start  =  $_GET["departing_date"];
-                   $end  =  $_GET["arrival_date"];
+                                    $db_driver = Driver::find($driver->id);
+                                    if($db_driver  != NULL)
+                                    {
+                                        $db_driver->start  = $driver->start;
+                                        $db_driver->end  = $driver->end;
     
-                   $day=  date('D', strtotime($start));
+                                        array_push($drivers, $db_driver);
+                                    } 
+                             }
     
+                             return $drivers;
+                 }
     
-                   $start_date = new DateTime($start);
-                   $start_time =   $start_date->format('H:i:s');
-    
-                   $end_date = new DateTime($end);
-                   $end_time =  $end_date->format('H:i:s');
-    
-             //      //this retuns all drivers with  working on this day
-                   //$users = User::with('driver')->whereHas('times', function($q) use ($day, $start_time, $end_time) 
-                   // { 
-                   //    $q->where('day_week', $day)->where('day_week', $day)->where('start','<=',$start_time)->where('end','>=',$end_time);
-                   // })->whereHas('driver', function($q)
-                   // {
-    
-    
-        //
-             //      // })->get();
-    
-    
-    
-    
-                $sql ='select drivers.id, drivers.user_id, drivers.company_id, drivers.avatar_url, drivers.created_at,
-                                        drivers.updated_at  ,users_times.start, users_times.end from drivers 
-                                        inner join users_times on (drivers.user_id = users_times.user_id)
-                                        where (users_times.start<= "'.$start_time.'" and users_times.`end` >= "'.$end_time.'" and users_times.`day_week` ="'.$day.'") and drivers.id NOT IN(select bookings.driver_id  from bookings
-                                        where
-                                        (bookings.driver_arrival_time between "'.$start.'" and "'.$end.'" ) or
-                                        (bookings.arrival_date between "'.$start.'" and  "'.$end.'") or
-                                        (bookings.driver_arrival_time <= "'.$start.'" and bookings.arrival_date >= "'.$end.'") group by driver_id)';
-        //  echo "<br/>";
-        //echo $sql;
-        //  echo "<br/>";
-    
-                     $drivers = DB::select($sql);
-    
-    
-                    //next wee need to find each one as time to do the course
-                    // we consider departing time - 15 min to
-                    // will look just for drivers that have nothing to do in 15 min before the trip to consider the time that driver takes to arrive
-                    // however this is not enougth
-                    //but t eminimum to consider is 15  before, is there is more will no be aproblem course
-    
-    
-    
-                    $drivers_availbale_for_the_course = [];
-    
-                    foreach($drivers as $driver)
-                    {
-    
-    
-                        $db_driver = Driver::with('bookings')->with('user')->find($driver->id);
-                        if($db_driver  != NULL)
-                        {
-                            $db_driver->start  = $driver->start;
-                            $db_driver->end  = $driver->end;
-                            array_push($drivers_availbale_for_the_course, $db_driver );
-                        } 
-                    }
-    
-                    echo json_encode($drivers_availbale_for_the_course);
-                }
-    
-                public function timesdashboard($id){
-                    $driver = Driver::find($id); 
-                    return View::make('drivers.times.index',['driver' => $driver,'load_time_table' => 'load_time_table('.$driver->user_id.')']);
-                }
-    
-                public function timesheet_save($id)
-                {
-                    $result = 1;
-    
-                    $intervals = array();
-    
-                    $user_time=  UserTimes::where('user_id',$id)->orderBy('id','desc')->get()->first();
-    
-                    if(isset($_GET["data"]))
-                        $intervals = $_GET["data"];
-    
-                    foreach($intervals as $interval)
-                    {
-                      $user_times = new UserTimes;
-                      $user_times->fill($interval);
-                      $result =  $user_times->save();
-                      if($result== 0)
-                      {
-                          UserTimes::where('user_id',$id)->where('id','>',  $user_time->id)->delete();
-                        return 0;
-                      }
-                    }
-    
-                    if($result==1 && isset($user_time))
-                    {
-                         UserTimes::where('user_id',$id)->where('id','<=',  $user_time->id)->delete();
-                    }
-                }
-    
-                 public function timesheet($id)
+                 function get_average_drivers($drivers , $best_driver, $best_drivers)
                  {
     
-                    $times = User::find($id)->times;
+                           foreach($drivers as $driver)
+                           {
     
-                    $timesheet =[];
+                               //echo 'iD '.$driver->id;
+                              $distance_margin = $best_driver->total_time_plus + 900;
+                              ///  echo 'original '.$driver->total_time_plus.' and '.$distance_margin.' </br>';
     
-                    for($i=0; $i<24; $i++)
-                    {
-                        $timeline = new Timeline($i);
-                        array_push($timesheet, $timeline);
-                    }
+                                 if($driver->total_time_plus <= $distance_margin && $driver->id != $best_driver->id)
+                                    array_push($best_drivers, $driver);
+                           }
     
-    
-                  foreach($times as $time)
-                  {
-                        //echo "start-".$time->start;
-                        //echo " end-".$time->end;
-                    $start =  intval(substr($time->start,0,2));
-                    $end =  intval(substr($time->end,0,2));
-    
-                    $day = $time->day_week;
-                    $paint = FALSE;
-    
-                    foreach($timesheet as $timeline)
-                    {   
-                        //if interval start set painting to true
-                         if(intval($timeline->hour) == intval($start))
-                            $paint = TRUE;
-                        //if interval stops set painting to false
-                         if(intval($timeline->hour) == intval($end))
-                             $paint = FALSE;
-                        //if paint dset DAY-HOUR to painted or active
-                         if($paint == TRUE)
-                            $timeline->$day= 'active';
-    
-                         //if the last item i setted to active i set to tru because we dont have a 24 to set up the stop
-                        if(intval($timeline->hour) == 23 and intval($end)==23)
-                            $timeline->$day= 'active';
-    
-                     } 
+                           return  $best_drivers;
                   }
     
-                     $this->Jtable($timesheet);
-                }
-            }
+    
+                 function get_best_driver_trip($drivers)
+                        {
+                           $fastest_driver = NULL;
+                           foreach($drivers as $driver)
+                           {
+                               if($driver->availability == 'TRIP')
+                               {
+                                   if($fastest_driver == NULL)
+                                        $fastest_driver = $driver;
+    
+                                        if($driver->total_time_plus <  $fastest_driver->total_time_plus)
+                                         $fastest_driver = $driver;
+                               }
+                           }
+    
+                           return $fastest_driver;
+    
+                        }
+    
+    
+                        //Get default trips
+    
+    
+                 function Trip_AB($departing, $arrival)
+                        {
+                                  $default_offers=[];
+    
+    
+                                 //TRAJECT NORMAL A > B
+                                 $offers_data = new Offer();
+                                 $offers_data->title = 'Trajects facturé a lá Minute Depuis '.$departing.' jusque á '.$arrival;
+                                 $offers_data->description  = 'Trajects facturé a lá Minute Depuis '.$departing.' jusque á '.$arrival;
+                                 $offers_data->departing = $departing;
+                                 $offers_data->dlat = NULL;
+                                 $offers_data->dlng = NULL;
+                                 $offers_data->radiusd= NULL;
+                                 $offers_data->arrival = $arrival;;
+                                 $offers_data->alat = NULL;
+                                 $offers_data->dlng =  NULL;
+                                 $offers_data->trip_method = 'TAB';
+                                 array_push($default_offers, $offers_data);
+    
+                                 $offers_data = new Offer();
+                                 $offers_data->title = 'Trajects facturé a au KM Depuis '.$departing.' jusque á '.$arrival;
+                                 $offers_data->description  = 'Trajects facturé a lá Minute Depuis '.$departing.' jusque á '.$arrival;
+                                 $offers_data->departing = $departing;
+                                 $offers_data->dlat = NULL;
+                                 $offers_data->dlng = NULL;
+                                 $offers_data->radiusd= NULL;
+                                 $offers_data->arrival = $arrival;;
+                                 $offers_data->alat = NULL;
+                                 $offers_data->dlng =  NULL;
+                                 $offers_data->trip_method = 'TAB';
+                                 array_push($default_offers, $offers_data);
+    
+                                 return $default_offers;
+    
+                       }
+    
+                function default_offers($drivers, $offers_existing)
+                     {
+    
+    
+                         $cars = [];
+    
+                         foreach($drivers as $driver)
+                         {
+                           if($driver->car != NULL)
+                           {
+                             foreach($driver->car as $car)
+                             {
+                                 $found = FALSE;
+    
+    
+                                 foreach($cars as $saved_car)
+                                 {
+                                     if($saved_car->id == $car->id)
+                                         $found = TRUE;
+                                 } 
+    
+                                 if($found == FALSE)   
+                                     array_push($cars, $car);
+                             }
+                           }
+    
+                         }
+    
+    
+    
+    
+    
+                        if(count($drivers))
+                        {     
+    
+    
+    
+                             $Offer = new Offer;
+                             $Offer->id = -1;
+                             $Offer->title ="Tarif par KMS dans la region ".$this->departing;
+                             $Offer->description ="Tarif par KMS dans la region ".$this->departing;
+                             $Offer->departing = $this->departing;
+                             $Offer->dlat = $this->dlat;
+                             $Offer->dlng = $this->dlng; 
+                             $Offer->radiusd = 0;
+                             $Offer->calc_method = 1;
+                             $Offer->cost = $this->total_trip_distance * $this->km_unit;
+                             $Offer->kms = round(floatval($this->total_trip_distance),2);
+                             $Offer->unit = $this->km_unit;
+                             $Offer->cars =  $cars;
+                             $Offer->trip_method = 'TZG';
+                             $Offer->unit = $this->kms;
+                             array_push($offers_existing, $Offer);
+    
+                             $Offer = new Offer;
+                             $Offer->id = -1;
+                             $Offer->title ="Tarif à la minute dans la region ".$this->departing;
+                             $Offer->description ="Tarif à la minute dans la region ".$this->departing;
+                             $Offer->departing = $this->departing;
+                             $Offer->dlat = $this->dlat;
+                             $Offer->dlng = $this->dlng; 
+                             $Offer->radiusd = 0;
+                             $Offer->calc_method = 2;
+                             $Offer->kms = round(floatval($this->total_trip_distance),2);
+    
+    
+                             //calc get by google gets the distance and time
+                             //we know distance and time
+                             //ex: 20 KM in 25 MINUTES
+                             // 20 KM / 25 Min == esch minutes as amout of KM
+                             // 1 Min = 0.8 KM
+                             // 1 KM = pirce ex: 2 € $this->KMS_unit
+                             // 2 * 0.8 = price / minute, cause 1 Km = 2 € and 0.8 km = Minute so =0.8 KM  * 2  price per minute
+    
+                             $KMS_per_minute = $this->total_trip_distance/ $this->total_trip_time;
+                             $price_perminute = $this->km_unit *  $KMS_per_minute;
+                             $Offer->cost =   round($price_perminute * $this->total_trip_time,2);
+                             $Offer->minutes =   round(floatval($this->total_trip_time),2);
+                             $Offer->unit =$this->minute_unit;
+                             $Offer->cars=  $cars;
+                             $Offer->trip_method = 'TZG';
+                             array_push($offers_existing, $Offer);
+    
+    
+                             if($this->trip_method == 'TAB')
+                             {
+                                 $Offer = new Offer;
+                                 $Offer->id = -1;
+                                 $Offer->title ="Tarif à Fixe depuis ".$this->departing.' jusque à '.$this->arrival;
+                                 $Offer->description ="Tarif à Fixe depuis ".$this->departing.' jusque à '.$this->arrival;
+                                 $Offer->departing = $this->departing;
+                                 $Offer->dlat = $this->dlat;
+                                 $Offer->dlng = $this->dlng; 
+                                 $Offer->arrival = $this->arrival;
+                                 $Offer->alat = $this->alat;
+                                 $Offer->alng = $this->alng; 
+                                 $Offer->radiusd = 0;
+                                 $Offer->calc_method = 1;
+                                 $Offer->cost = $this->total_trip_distance * $this->km_unit;
+                                 $Offer->kms = round(floatval($this->total_trip_distance),2);
+                                 $Offer->unit = $this->km_unit;
+                                 $Offer->cars =  $cars;
+                                 $Offer->trip_method = $this->trip_method;
+                                 array_push($offers_existing, $Offer);
+                             }
+                        }
+    
+                         return $offers_existing;
+    
+                     }
+    
+                     function get_best_driver_all($drivers)
+                     {
+                           $fastest_driver = NULL;
+                           foreach($drivers as $driver)
+                           {
+                               if($driver->availability == 'ALL')
+                               {
+                                   if($fastest_driver == NULL)
+                                        $fastest_driver = $driver;
+    
+                                        if($driver->total_time_plus <  $fastest_driver->total_time_plus)
+                                         $fastest_driver = $driver;
+                               }
+                           }
+    
+                           return $fastest_driver;
+    
+                        }
+    
+    
+    
+    
+                   function timesdashboard($id){
+                            $driver = Driver::find($id); 
+                            return View::make('drivers.times.index',['driver' => $driver,'load_time_table' => 'load_time_table('.$driver->user_id.')']);
+                   }
+    
+    
+    
+    
+                 function timesheet($id)
+                  {
+    
+                            $times = User::find($id)->times;
+    
+                            $timesheet =[];
+    
+                            for($i=0; $i<24; $i++)
+                            {
+                                $timeline = new Timeline($i);
+                                array_push($timesheet, $timeline);
+                            }
+    
+    
+                          foreach($times as $time)
+                          {
+                                //echo "start-".$time->start;
+                                //echo " end-".$time->end;
+                            $start =  intval(substr($time->start,0,2));
+                            $end =  intval(substr($time->end,0,2));
+    
+                            $day = $time->day_week;
+                            $paint = FALSE;
+    
+                            foreach($timesheet as $timeline)
+                            {   
+                                //if interval start set painting to true
+                                 if(intval($timeline->hour) == intval($start))
+                                    $paint = TRUE;
+                                //if interval stops set painting to false
+                                 if(intval($timeline->hour) == intval($end))
+                                     $paint = FALSE;
+                                //if paint dset DAY-HOUR to painted or active
+                                 if($paint == TRUE)
+                                    $timeline->$day= 'active';
+    
+                                 //if the last item i setted to active i set to tru because we dont have a 24 to set up the stop
+                                if(intval($timeline->hour) == 23 and intval($end)==23)
+                                    $timeline->$day= 'active';
+    
+                             } 
+                          }
+    
+                             $this->Jtable($timesheet);
+                        }
+                 }
+    
+    
+    
+     class Availability
+     {
+         public $offers=[];
+         public $drivers=[];
+    
+     }

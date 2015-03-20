@@ -6,8 +6,10 @@
          *
          * @var string
          */
-        protected $table = 'users_times';
-        protected $fillable = ['id', 'user_id','day_week', 'start','end'];
+        protected $guarded = array('id');
+        protected $fillable = [];
+
+         protected $table = 'users_times';
         /**
          * The attributes excluded from the model's JSON form.
          *
